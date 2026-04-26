@@ -1,15 +1,48 @@
 # Toxic Comment Classification Project
 
-This VS Code project is designed for the Kaggle Toxic Comment Classification Challenge.
+This project implements a machine learning workflow for the Kaggle Toxic Comment Classification Challenge. It includes exploratory data analysis, model training and evaluation, combined result comparison, and Kaggle submission generation.
 
-## What you need to do first
+## Project structure
 
-1. Download these files from Kaggle and place them in the `data` folder:
-   - `train.csv`
-   - `test.csv`
-   - `sample_submission.csv`
+```text
+toxic_comment_project/
+├── data/
+│   ├── train.csv
+│   ├── test.csv
+│   └── sample_submission.csv
+├── outputs/
+│   ├── figures/
+│   ├── results/
+│   └── submissions/
+├── src/
+│   ├── eda.py
+│   ├── train_eval.py
+│   ├── compare_results.py
+│   ├── make_submission.py
+│   ├── check_device.py
+│   ├── config.py
+│   ├── device.py
+│   └── text_utils.py
+├── .gitignore
+├── README.md
+└── requirements.txt
+```
 
-2. Create and activate a virtual environment.
+## Dataset
+
+Download the required files from the Kaggle Toxic Comment Classification Challenge data page and place them inside the `data/` folder:
+
+```text
+train.csv
+test.csv
+sample_submission.csv
+```
+
+The optional `test_labels.csv` file is not required for the main workflow.
+
+## Environment setup
+
+Create and activate a Python virtual environment.
 
 Windows PowerShell:
 
@@ -20,55 +53,157 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-3. Check whether the project sees your GPU:
+## Check CPU or GPU availability
+
+The project includes a device checker. CUDA is mainly relevant for the SBERT embedding stage.
 
 ```powershell
 python src/check_device.py --device auto
+```
+
+You can also explicitly test CPU or CUDA:
+
+```powershell
 python src/check_device.py --device cpu
 python src/check_device.py --device cuda
 ```
 
-4. Run EDA and generate graphs:
+## 1. Exploratory data analysis
+
+Run:
 
 ```powershell
-python src/01_eda.py
+python src/eda.py
 ```
 
-5. Test experiments on a smaller sample first:
+This generates dataset summaries and visualisations in:
+
+```text
+outputs/figures/
+outputs/results/
+```
+
+Important EDA outputs include:
+
+```text
+class_balance.png
+labels_per_comment.png
+token_length_distribution.png
+label_correlation_heatmap.png
+top_words_by_label.csv
+```
+
+## 2. Train and evaluate models
+
+The training script compares three classifiers:
+
+```text
+Logistic Regression
+Linear SVM
+Random Forest
+```
+
+It tests two feature extraction strategies:
+
+```text
+TF-IDF with Truncated SVD
+SBERT sentence embeddings
+```
+
+Run the full experiments:
 
 ```powershell
-python src/02_train_eval.py --feature tfidf_svd --device cpu --sample 30000
-python src/02_train_eval.py --feature sbert --device auto --sample 30000
+python src/train_eval.py --feature tfidf_svd --device cuda
+python src/train_eval.py --feature sbert --device cuda
 ```
 
-6. Run full experiments when the test works:
+If CUDA is unavailable, use:
 
 ```powershell
-python src/02_train_eval.py --feature tfidf_svd --device cpu
-python src/02_train_eval.py --feature sbert --device auto
+python src/train_eval.py --feature tfidf_svd --device cpu
+python src/train_eval.py --feature sbert --device auto
 ```
 
-7. Build a Kaggle submission:
+To test faster on a smaller sample:
 
 ```powershell
-python src/03_make_submission.py --feature tfidf_full --model logreg --device cpu
+python src/train_eval.py --feature tfidf_svd --device cpu --sample 30000
+python src/train_eval.py --feature sbert --device auto --sample 30000
 ```
 
-## Notes about CPU and GPU
+The script saves:
 
-The scikit-learn classifiers in this project run on CPU. The `--device` switch is mainly used by SentenceTransformer embeddings. If you use `--device auto`, the code uses CUDA when PyTorch detects it, otherwise it falls back to CPU.
+```text
+per_label_metrics_*.csv
+summary_metrics_*.csv
+model_*.joblib
+roc_*.png
+summary_*.png
+run_config_*.json
+```
 
-For the report, compare:
-- TF-IDF with SVD features
-- SentenceTransformer embeddings
+## 3. Compare full-dataset results
 
-Across the same three models:
-- Logistic Regression
-- Linear SVM
-- Random Forest
+After running both full experiments, use `compare_results.py` to combine the model summaries into one final comparison table and create combined comparison figures.
 
-Recommended final Kaggle submission:
-- TF-IDF full word and character features
-- Logistic Regression
+Run:
 
-This is separated from the comparison experiment because it is usually stronger for leaderboard scoring.
+```powershell
+python src/compare_results.py
+```
+
+This reads the `summary_metrics_*.csv` files from:
+
+```text
+outputs/results/
+```
+
+It then keeps the full-dataset rows and creates:
+
+```text
+outputs/results/combined_model_comparison_full_dataset.csv
+```
+
+It also creates the following figures:
+
+```text
+outputs/figures/full_dataset_comparison_macro_auc.png
+outputs/figures/full_dataset_comparison_macro_f1.png
+outputs/figures/full_dataset_comparison_macro_precision.png
+outputs/figures/full_dataset_comparison_macro_recall.png
+outputs/figures/full_dataset_comparison_hamming_accuracy.png
+```
+
+These figures are useful for the final report because they compare all tested model and feature combinations in one place.
+
+## 4. Generate Kaggle submissions
+
+Use `make_submission.py` to train a final model on the full training set and generate a Kaggle-compatible CSV file.
+
+Recommended TF-IDF submission:
+
+```powershell
+python src/make_submission.py --feature tfidf_full --model logreg --device cpu
+```
+
+SBERT submission:
+
+```powershell
+python src/make_submission.py --feature sbert --model logreg --device cuda
+```
+
+Generated submission files are saved in:
+
+```text
+outputs/submissions/
+```
+
+Upload the generated `.csv` files to Kaggle and compare the public and private scores.
+
+## Final selected model
+
+In the completed experiment, full TF-IDF word and character n-gram features with One-vs-Rest Logistic Regression achieved the strongest Kaggle result.
+
+The SBERT Logistic Regression model performed strongest in local validation by macro AUC, but the full TF-IDF Logistic Regression model achieved the best Kaggle submission score.
+
+
